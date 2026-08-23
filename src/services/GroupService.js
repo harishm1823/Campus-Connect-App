@@ -1,0 +1,480 @@
+import { firestore, storage, getFirestoreService } from '../firebase';
+import { AuthService } from './AuthService';
+import { withFirestoreRetry } from '../utils/firestoreRetry';
+import GamificationService from './GamificationService';
+
+export const GroupService = {
+  // Create a new group
+  createGroup: async (groupData) => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser()?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      // Create group document
+      const groupRef = firestoreService.collection('groups').doc();
+      await groupRef.set({
+        ...groupData,
+        members: [
+          {
+            userId,
+            role: 'admin'
+          }
+        ],
+        createdBy: userId,
+        createdAt: firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Award XP for creating a group
+      try {
+        await GamificationService.awardXP(100, 'Created a new study group', {
+          type: 'create_group'
+        });
+      } catch (error) {
+        console.warn('Failed to award XP for group creation:', error);
+      }
+      
+      return { groupId: groupRef.id };
+    }, 3, 'createGroup');
+  },
+  
+  // Get all groups with optional filters
+  getGroups: async (filters = {}) => {
+    return withFirestoreRetry(async () => {
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      let query = firestoreService.collection('groups');
+      
+      // Apply filters
+      if (filters.type) {
+        query = query.where('type', '==', filters.type);
+      }
+      
+      if (filters.tags && filters.tags.length > 0) {
+        query = query.where('tags', 'array-contains-any', filters.tags);
+      }
+      
+      // Get groups
+      const groupsSnapshot = await query
+        .orderBy('createdAt', 'desc')
+        .limit(20)
+        .get();
+      
+      const groups = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+      }));
+      
+      return groups;
+    }, 3, 'getGroups');
+  },
+  
+  // Get user's groups
+  getUserGroups: async () => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser().uid;
+      
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      // Get groups where user is a member
+      const groupsSnapshot = await firestoreService
+        .collection('groups')
+        .where('members', 'array-contains', { userId, role: 'admin' })
+        .orderBy('createdAt', 'desc')
+        .get();
+      
+      const groups = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+      }));
+      
+      return groups;
+    }, 3, 'getUserGroups');
+  },
+  
+  // Get a specific group by ID
+  getGroupById: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      if (!groupId) throw new Error('Group ID is required');
+      
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      
+      return {
+        id: groupDoc.id,
+        ...groupData,
+        createdAt: groupData.createdAt?.toDate() || new Date()
+      };
+    }, 3, 'getGroupById');
+  },
+  
+  // Join a group
+  joinGroup: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser().uid;
+      
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      // Get current group data to check for existing membership
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      const existingMember = groupData.members.find(member => member.userId === userId);
+      
+      // If user is already a member, don't add them again
+      if (existingMember) {
+        console.log('User is already a member of this group');
+        return { success: true, message: 'Already a member' };
+      }
+      
+      // Add user to group members
+      await firestoreService.collection('groups').doc(groupId).update({
+        members: firestore.FieldValue.arrayUnion({
+          userId,
+          role: 'member'
+        })
+      });
+      
+      // Award XP for joining a group
+      try {
+        await GamificationService.awardXP(50, 'Joined a study group', {
+          type: 'join_group'
+        });
+      } catch (error) {
+        console.warn('Failed to award XP for joining group:', error);
+      }
+      
+      return { success: true };
+    }, 3, 'joinGroup');
+  },
+
+  // Clean up duplicate memberships (utility function)
+  cleanupDuplicateMembers: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      const firestoreService = await getFirestoreService();
+      
+      // Get current group data
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      const members = groupData.members || [];
+      
+      // Create a map to track unique users and their highest role
+      const uniqueMembers = new Map();
+      
+      members.forEach(member => {
+        if (!uniqueMembers.has(member.userId)) {
+          uniqueMembers.set(member.userId, member);
+        } else {
+          // If user already exists, keep the admin role if they have it
+          const existing = uniqueMembers.get(member.userId);
+          if (member.role === 'admin' || (existing.role !== 'admin' && member.role === 'member')) {
+            uniqueMembers.set(member.userId, member);
+          }
+        }
+      });
+      
+      // Convert back to array
+      const cleanedMembers = Array.from(uniqueMembers.values());
+      
+      // Update the group if duplicates were found
+      if (cleanedMembers.length !== members.length) {
+        await firestoreService.collection('groups').doc(groupId).update({
+          members: cleanedMembers
+        });
+        console.log(`Cleaned up duplicate members in group ${groupId}. Reduced from ${members.length} to ${cleanedMembers.length} members.`);
+        return { success: true, cleaned: true, oldCount: members.length, newCount: cleanedMembers.length };
+      }
+      
+      return { success: true, cleaned: false, message: 'No duplicates found' };
+    }, 3, 'cleanupDuplicateMembers');
+  },
+  
+  // Leave a group
+  leaveGroup: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser().uid;
+      
+      // Get group data
+      const groupDoc = await firestore().collection('groups').doc(groupId).get();
+      const groupData = groupDoc.data();
+      
+      // Find user's member object
+      const memberIndex = groupData.members.findIndex(member => member.userId === userId);
+      
+      if (memberIndex !== -1) {
+        // Remove user from members array
+        const updatedMembers = [...groupData.members];
+        updatedMembers.splice(memberIndex, 1);
+        
+        await firestore().collection('groups').doc(groupId).update({
+          members: updatedMembers
+        });
+      }
+      
+      return { success: true };
+    }, 3, 'leaveGroup');
+  },
+  
+  // Update a group
+  updateGroup: async (groupId, groupData) => {
+    return withFirestoreRetry(async () => {
+      await firestore().collection('groups').doc(groupId).update(groupData);
+      return { success: true };
+    }, 3, 'updateGroup');
+  },
+  
+  // Get group members
+  getGroupMembers: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      if (!groupId) throw new Error('Group ID is required');
+      
+      // Get group data
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      if (!groupData || !Array.isArray(groupData.members)) {
+        return [];
+      }
+      
+      // Get member profiles
+      const members = [];
+      
+      for (const member of groupData.members) {
+        try {
+          const userDoc = await firestoreService.collection('users').doc(member.userId).get();
+          const userData = userDoc.data();
+          
+          if (userData) {
+            members.push({
+              userId: member.userId,
+              role: member.role,
+              displayName: userData.displayName || 'Unknown User',
+              photoURL: userData.photoURL || null,
+              branch: userData.branch || 'Not specified',
+              year: userData.year || 'Not specified'
+            });
+          }
+        } catch (userError) {
+          console.warn(`Error fetching user ${member.userId}:`, userError);
+          // Add basic member info even if we can't get full profile
+          members.push({
+            userId: member.userId,
+            role: member.role,
+            displayName: 'Unknown User',
+            photoURL: null,
+            branch: 'Not available',
+            year: 'Not available'
+          });
+        }
+      }
+      
+      return members;
+    }, 3, 'getGroupMembers');
+  },
+  
+  // Upload group image
+  uploadGroupImage: async (groupId, uri) => {
+    return withFirestoreRetry(async () => {
+      const reference = storage().ref(`groups/${groupId}/cover.jpg`);
+      
+      // Upload image
+      await reference.putFile(uri);
+      
+      // Get download URL
+      const url = await reference.getDownloadURL();
+      
+      // Update group with new photo URL
+      await firestore().collection('groups').doc(groupId).update({
+        coverURL: url
+      });
+      
+      return url;
+    }, 3, 'uploadGroupImage');
+  },
+  
+  // Create a group chat
+  createGroupChat: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      // Get group data
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      const groupData = groupDoc.data();
+      
+      if (!groupData) {
+        throw new Error('Group not found');
+      }
+      
+      // Create chat document
+      const chatRef = firestoreService.collection('chats').doc();
+      await chatRef.set({
+        participants: groupData.members.map(member => member.userId),
+        lastMessage: {
+          text: 'Group chat created',
+          sentBy: 'system',
+          sentAt: firestore.FieldValue.serverTimestamp()
+        },
+        isGroupChat: true,
+        groupId,
+        groupName: groupData.name,
+        createdAt: firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update group with chat ID
+      await firestoreService.collection('groups').doc(groupId).update({
+        chatId: chatRef.id
+      });
+      
+      return { chatId: chatRef.id };
+    }, 3, 'createGroupChat');
+  },
+  
+  // Get group chat
+  getGroupChat: async (groupId) => {
+    return withFirestoreRetry(async () => {
+      // Get Firestore instance
+      const firestoreService = await getFirestoreService();
+      
+      // Get group data
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      const groupData = groupDoc.data();
+      
+      if (!groupData) {
+        throw new Error('Group not found');
+      }
+      
+      if (!groupData.chatId) {
+        // Create a new chat if one doesn't exist
+        return await GroupService.createGroupChat(groupId);
+      }
+      
+      return { chatId: groupData.chatId };
+    }, 3, 'getGroupChat');
+  },
+  
+  // Search for groups
+  searchGroups: async (query) => {
+    return withFirestoreRetry(async () => {
+      // This is a simple implementation that doesn't use full-text search
+      // For production, consider using Algolia or a similar service
+      
+      const groupsSnapshot = await firestore()
+        .collection('groups')
+        .orderBy('name')
+        .startAt(query)
+        .endAt(query + '\uf8ff')
+        .limit(20)
+        .get();
+      
+      const groups = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate()
+      }));
+      
+      return groups;
+    }, 3, 'searchGroups');
+  },
+
+  // Update group photo
+  updateGroupPhoto: async (groupId, photoURL) => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser()?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+      
+      const firestoreService = await getFirestoreService();
+      
+      // Verify user is admin of the group
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      const isAdmin = groupData.members.some(member => 
+        member.userId === userId && member.role === 'admin'
+      );
+      
+      if (!isAdmin) {
+        throw new Error('Only group admins can update the group photo');
+      }
+      
+      // Update group photo
+      await firestoreService.collection('groups').doc(groupId).update({
+        photoURL,
+        updatedAt: firestore.FieldValue.serverTimestamp()
+      });
+      
+      return { success: true };
+    }, 3, 'updateGroupPhoto');
+  },
+
+  // Update group details
+  updateGroup: async (groupId, updateData) => {
+    return withFirestoreRetry(async () => {
+      const userId = AuthService.getCurrentUser()?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+      
+      const firestoreService = await getFirestoreService();
+      
+      // Verify user is admin of the group
+      const groupDoc = await firestoreService.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        throw new Error('Group not found');
+      }
+      
+      const groupData = groupDoc.data();
+      const isAdmin = groupData.members.some(member => 
+        member.userId === userId && member.role === 'admin'
+      );
+      
+      if (!isAdmin) {
+        throw new Error('Only group admins can update the group');
+      }
+      
+      // Update group
+      await firestoreService.collection('groups').doc(groupId).update({
+        ...updateData,
+        updatedAt: firestore.FieldValue.serverTimestamp()
+      });
+      
+      return { success: true };
+    }, 3, 'updateGroup');
+  }
+};
+
+export default GroupService;
