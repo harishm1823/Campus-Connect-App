@@ -52,7 +52,7 @@ Campus Connect App is a cross-platform mobile application designed to foster aca
 
 ## Development Timeline
 
-- Target deployment: **Before May 30th, 2025**
+- Target deployment: **Before May 30th, 2026**
 - Includes beta testing plan and full deployment
 
 ## Contributing
