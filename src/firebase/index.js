@@ -14,13 +14,13 @@ console.log('Firebase module loading...');
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAHdvEXK-MQx1Ek_IGJXtrxws7mKp_btLM",
-  authDomain: "campus-connect-app-f54ab.firebaseapp.com",
-  databaseURL: "https://campus-connect-app-f54ab-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "campus-connect-app-f54ab", 
-  storageBucket: "campus-connect-app-f54ab.firebasestorage.app",
-  messagingSenderId: "557840982266",
-  appId: "1:557840982266:android:1d92485a2d983de8692943"
+  apiKey: "Firebase_API_Key",
+  authDomain: "Firebase_Auth_Domain",
+  databaseURL: "Firebase_Database_URL",
+  projectId: "Firebase_Project_ID", 
+  storageBucket: "Firebase_Storage_Bucket",
+  messagingSenderId: "Firebase_Messaging_Sender_ID",
+  appId: "Firebase_App_ID",
 };
 
 // Enable offline persistence
