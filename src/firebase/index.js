@@ -5,6 +5,15 @@ import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import functions from '@react-native-firebase/functions';
 import messaging from '@react-native-firebase/messaging';
+import {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_DATABASE_URL,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID,
+} from '@env';
 
 // Initialize variables at the top level
 let firebaseApp = null;
@@ -14,13 +23,13 @@ console.log('Firebase module loading...');
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "Firebase_API_Key",
-  authDomain: "Firebase_Auth_Domain",
-  databaseURL: "Firebase_Database_URL",
-  projectId: "Firebase_Project_ID", 
-  storageBucket: "Firebase_Storage_Bucket",
-  messagingSenderId: "Firebase_Messaging_Sender_ID",
-  appId: "Firebase_App_ID",
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  databaseURL: FIREBASE_DATABASE_URL,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID,
 };
 
 // Enable offline persistence
