@@ -4,6 +4,15 @@ This document outlines the setup and configuration of Firebase services for the 
 
 ## Firebase Project Setup
 
+### Firebase Setup
+This project requires Firebase credentials that are not included in the repo for security reasons.
+
+1. Create your own Firebase project at https://console.firebase.google.com
+2. Add an Android app with package name `com.tempproject`
+3. Download your `google-services.json`
+4. Place it at `android/app/google-services.json`
+   (see `google-services.json.example` for the expected structure)
+
 ### Project Creation
 1. Create a new Firebase project named "Campus Connect"
 2. Configure it for both Android and iOS platforms
