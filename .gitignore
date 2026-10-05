@@ -90,3 +90,10 @@ ios/build/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Gradle
+.gradle/
+**/.gradle/
+
+# Android build files
+**/build/
