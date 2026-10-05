@@ -58,7 +58,8 @@ const verifyFirestoreAccess = async () => {
     }
 
     console.log('Verifying Firestore write access for user:', currentUser.uid);
-    const testDocRef = firestore().collection('_health_checks').doc(`write_${currentUser.uid}`);
+    // Use the _test_write_ collection which has proper rules defined
+    const testDocRef = firestore().collection('_test_write_').doc(`write_${currentUser.uid}`);
     await testDocRef.set({ timestamp: firestore.FieldValue.serverTimestamp(), uid: currentUser.uid });
     await testDocRef.delete();
     console.log('Firestore write access verified');
@@ -79,11 +80,11 @@ const verifyFirestoreAccess = async () => {
 const initializeFirebase = async () => {
   const maxRetries = 3;
   let retryCount = 0;
-  
+
   while (retryCount < maxRetries) {
     try {
       console.log(`Starting Firebase initialization (attempt ${retryCount + 1}/${maxRetries})...`);
-      
+
       // Check for existing initialized app
       if (firebase.apps.length > 0) {
         console.log('Found existing Firebase app');
@@ -95,24 +96,24 @@ const initializeFirebase = async () => {
 
       // Enable offline persistence
       await enableOfflinePersistence();
-      
+
       // Optional: verify write access (non-blocking)
       const writeCheck = await verifyFirestoreAccess();
       if (writeCheck !== 'verified') {
         console.log(`Firestore write check result: ${writeCheck} (not blocking initialization)`);
       }
-      
+
       console.log('Firebase initialized successfully!', {
         name: firebaseApp.name,
         projectId: firebaseApp.options.projectId
       });
-      
+
       return firebaseApp;
-      
+
     } catch (error) {
       retryCount++;
     console.error(`Firebase initialization error (attempt ${retryCount}):`, error);
-      
+
       if (retryCount < maxRetries) {
         const delay = retryCount * 2000;
         console.log(`Retrying in ${delay/1000} seconds...`);
@@ -134,7 +135,7 @@ export const getFirebaseApp = async () => {
         throw error;
       });
   }
-  
+
   try {
     const app = await initializationPromise;
     if (!app) {
