@@ -11,6 +11,13 @@ firebase-debug.*.log*
 .firebase/
 android/app/google-services.json
 
+*.keystore
+*.jks
+
+# Android signing secrets
+android/keystore.properties
+android/app/campus-connect-upload-key.keystore
+
 # Firebase config
 
 # Uncomment this if you'd like others to create their own Firebase project.
