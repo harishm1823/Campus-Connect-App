@@ -1,3 +1,9 @@
+import auth, { GoogleAuthProvider } from '@react-native-firebase/auth';
+import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
+
 import React, { useState } from 'react';
 import { 
   View, 
@@ -11,11 +17,15 @@ import {
   ScrollView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import auth from '@react-native-firebase/auth';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import TextInput from '../components/TextInput';
 import Button from '../components/Button';
 import { AuthService } from '../services/AuthService';
+
+
+GoogleSignin.configure({
+  webClientId: '557840982266-jfq83d2lna9gugscn7t9hr59aqrrjfmk.apps.googleusercontent.com',
+});
 
 const SignInScreen = () => {
   const navigation = useNavigation();
@@ -28,32 +38,80 @@ const SignInScreen = () => {
 
   // Keep the existing Google sign-in method for fallback/testing
   const handleGoogleSignIn = async () => {
-    try {
-      setLoading(true);
-      
-      // Create a test user with email/password for development
-      const userCredential = await auth().createUserWithEmailAndPassword(
-        'test@example.com',
-        'password123'
-      );
-      
-    } catch (error) {
-      // If user already exists, try to sign in instead
-      if (error.code === 'auth/email-already-in-use') {
-        try {
-          await auth().signInWithEmailAndPassword('test@example.com', 'password123');
-        } catch (signInError) {
-          Alert.alert('Sign In Failed', 'Please try again.');
-          console.error('Sign in error:', signInError);
-        }
-      } else {
-        Alert.alert('Sign In Failed', 'Please try again.');
-        console.error('Sign in error:', error);
-      }
-    } finally {
-      setLoading(false);
+  if (loading) return;
+
+  try {
+    setLoading(true);
+
+    // Check whether Google Play Services is available
+    await GoogleSignin.hasPlayServices({
+      showPlayServicesUpdateDialog: true,
+    });
+
+    // Open Google Sign-In
+    const result = await GoogleSignin.signIn();
+
+    // Handle cancellation (newer package versions)
+    if (result.type === 'cancelled') {
+      return;
     }
-  };
+
+    if (result.type !== 'success') {
+      throw new Error('Google Sign-In was not successful.');
+    }
+
+    // Get Google ID token
+    const idToken = result.data?.idToken;
+
+    if (!idToken) {
+      throw new Error(
+        'Google ID token was not received. Check your Web Client ID configuration.'
+      );
+    }
+
+    // Create Firebase Google credential
+    const googleCredential =
+      GoogleAuthProvider.credential(idToken);
+
+    // Authenticate with Firebase
+    const userCredential = await auth().signInWithCredential(
+      googleCredential
+    );
+
+    console.log(
+      'Google Sign-In successful:',
+      userCredential.user.email
+    );
+
+    // Your existing Firebase authentication listener
+    // should handle navigation after sign-in.
+
+  } catch (error) {
+    console.error('Google Sign-In error:', error);
+
+    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      return;
+    }
+
+    let errorMessage = 'Please try again.';
+
+    if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      errorMessage =
+        'Google Play Services is unavailable or needs updating.';
+    } else if (error.code === 'auth/account-exists-with-different-credential') {
+      errorMessage =
+        'An account already exists with this email using another sign-in method.';
+    } else if (error.code === 'auth/network-request-failed') {
+      errorMessage = 'Check your internet connection and try again.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    Alert.alert('Google Sign-In Failed', errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const validateForm = () => {
     const newErrors = {};
