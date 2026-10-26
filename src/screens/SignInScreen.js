@@ -1,9 +1,3 @@
-import auth, { GoogleAuthProvider } from '@react-native-firebase/auth';
-import {
-  GoogleSignin,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
-
 import React, { useState } from 'react';
 import { 
   View, 
@@ -17,6 +11,11 @@ import {
   ScrollView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import auth from '@react-native-firebase/auth';
+import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import TextInput from '../components/TextInput';
 import Button from '../components/Button';
@@ -44,13 +43,16 @@ const SignInScreen = () => {
     setLoading(true);
 
     // Check whether Google Play Services is available
-    await GoogleSignin.hasPlayServices({
-      showPlayServicesUpdateDialog: true,
-    });
+await GoogleSignin.hasPlayServices({
+  showPlayServicesUpdateDialog: true,
+});
 
-    // Open Google Sign-In
-    const result = await GoogleSignin.signIn();
+// Sign out of the Google Sign-In session
+// so the user can choose an account again
+await GoogleSignin.signOut();
 
+// Open Google account selection
+const result = await GoogleSignin.signIn();
     // Handle cancellation (newer package versions)
     if (result.type === 'cancelled') {
       return;
@@ -70,8 +72,9 @@ const SignInScreen = () => {
     }
 
     // Create Firebase Google credential
-    const googleCredential =
-      GoogleAuthProvider.credential(idToken);
+   // Create Firebase Google credential
+const googleCredential =
+  auth.GoogleAuthProvider.credential(idToken);
 
     // Authenticate with Firebase
     const userCredential = await auth().signInWithCredential(
