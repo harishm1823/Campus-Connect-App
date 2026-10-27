@@ -2,6 +2,8 @@
 
 Campus Connect App is a cross-platform mobile application designed to foster academic collaboration, group activities, and gamification among students. Built with React Native and Firebase, it provides a seamless experience for discovering peers, forming groups, and engaging in campus-wide activities.
 
+[![Download APK](https://img.shields.io/badge/Download-APK-green?style=for-the-badge&logo=android)](https://github.com/harishm1823/Campus-Connect-App/releases/download/v1.0.0/Campus.Connect.apk)
+
 ## Features
 
 - **Matching System:** Tinder-like interface for academic collaboration and networking.
@@ -26,8 +28,8 @@ Campus Connect App is a cross-platform mobile application designed to foster aca
 
 1. **Clone the repository:**
    ```sh
-   git clone https://github.com/monu808/campus-connect-app.git
-   cd campus-connect-app
+   git clone https://github.com/harishm1823/Campus-Connect-App.git
+   cd Campus-Connect-App
    ```
 2. **Install dependencies:**
    ```sh
