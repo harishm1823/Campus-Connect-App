@@ -13,6 +13,12 @@ Campus Connect App is a cross-platform mobile application designed to foster aca
 - **Push Notifications:** Real-time updates using Firebase Cloud Messaging (FCM).
 - **Authentication:** Secure login and registration via Firebase Auth.
 
+## Screenshots
+
+| Onboarding | Events | Event Details | Groups | Profile |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="screenshots/onboarding.jpeg" width="160"> | <img src="screenshots/events.jpeg" width="160"> | <img src="screenshots/event-details.jpeg" width="160"> | <img src="screenshots/create-group.jpeg" width="160"> | <img src="screenshots/profile.jpeg" width="160"> |
+
 ## Technology Stack
 
 - **Frontend:** React Native (Android & iOS)
